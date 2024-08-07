@@ -7,22 +7,26 @@ import (
 )
 
 type Configuration struct {
-	Name    string `json:"name"`
-	Account string `json:"account"`
-	Project string `json:"project"`
-	Active  bool   `json:"is_active"`
+	Name       string `json:"name"`
+	Account    string `json:"account"`
+	Project    string `json:"project"`
+	Active     bool   `json:"is_active"`
+	Activating bool   `json:"-"`
 }
 
-func (c Configuration) Title() string {
+func (c *Configuration) Title() string {
 	if c.Active {
-		return fmt.Sprintf("%v*", c.Name)
+		return fmt.Sprintf("%v ✅", c.Name)
+	}
+	if c.Activating {
+		return fmt.Sprintf("%v 🔄", c.Name)
 	}
 	return c.Name
 }
-func (c Configuration) Description() string {
+func (c *Configuration) Description() string {
 	return fmt.Sprintf("Account: %s, Project: %s", c.Account, c.Project)
 }
-func (c Configuration) FilterValue() string { return c.Name }
+func (c *Configuration) FilterValue() string { return c.Name }
 
 func (c *Configuration) UnmarshalJSON(data []byte) error {
 	var raw map[string]interface{}

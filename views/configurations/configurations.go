@@ -108,6 +108,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			return m, nil
 		case "enter":
+			m.list.SelectedItem().(*gcloud.Configuration).Activating = true
 			return m, func() tea.Msg {
 				if err := gcloud.ActivateConfiguration(m.list.SelectedItem().(*gcloud.Configuration).Name); err != nil {
 					return ErrMsg{err}
@@ -130,6 +131,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.configurations = msg.configurations
 		m.list.SetItems(msg.items)
 		m.list.Select(msg.activeIdx)
+
+	case ErrMsg:
+		m.error = msg.err
 	}
 
 	var cmds []tea.Cmd

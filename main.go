@@ -27,9 +27,11 @@ type model struct {
 	configurationsPanelId bl.ID
 	instancesPanelId      bl.ID
 	historyPanelId        bl.ID
+	statusPanelId         bl.ID
 	configSize            bl.Size
 	instSize              bl.Size
 	historySize           bl.Size
+	statusSize            bl.Size
 
 	state          sessionState
 	configurations tea.Model
@@ -45,12 +47,14 @@ func initialModel() model {
 	layout := bl.New()
 	configurationsPanelId := layout.Add("")
 	instancesPanelId := layout.Add("wrap")
-	historyPanelId := layout.Add("spanw 2")
+	historyPanelId := layout.Add("spanw 2 wrap")
+	statusPanelId := layout.Add("dock south 1!")
 	return model{
 		layout:                layout,
 		configurationsPanelId: configurationsPanelId,
 		instancesPanelId:      instancesPanelId,
 		historyPanelId:        historyPanelId,
+		statusPanelId:         statusPanelId,
 		state:                 sessionStateConfigurations,
 		configurations:        configurations.InitialModel(),
 		instances:             instances.InitialModel(),
@@ -128,6 +132,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.configSize, _ = msg.Size(m.configurationsPanelId)
 		m.instSize, _ = msg.Size(m.instancesPanelId)
 		m.historySize, _ = msg.Size(m.historyPanelId)
+		m.statusSize, _ = msg.Size(m.statusPanelId)
 		m.configurations.Update(m.configSize)
 		m.instances.Update(m.instSize)
 
@@ -162,6 +167,8 @@ func (m model) View() string {
 		),
 		views.BoxStyle(
 			m.historySize, false).Render("History"),
+		views.BoxStyle(
+			m.statusSize, false).Padding(0, 1).Background(lipgloss.Color("62")).Align(lipgloss.Right, lipgloss.Center).Render("Status"),
 	)
 }
 
