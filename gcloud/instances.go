@@ -3,6 +3,7 @@ package gcloud
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/charmbracelet/bubbles/list"
 	"os"
 	"os/exec"
 	"path"
@@ -23,12 +24,16 @@ type Instance struct {
 	Status InstanceStatus
 }
 
-func (i Instance) Title() string       { return i.Name }
-func (i Instance) Description() string { return path.Base(i.Zone) }
-func (i Instance) FilterValue() string { return i.Name }
+var _ list.Item = &Instance{}
 
-func ListInstances() ([]*Instance, error) {
-	cacheFile := "instances_cache.json"
+func (i *Instance) Title() string       { return i.Name }
+func (i *Instance) Description() string { return path.Base(i.Zone) }
+func (i *Instance) FilterValue() string {
+	return i.Name
+}
+
+func ListInstances(configName string) ([]*Instance, error) {
+	cacheFile := fmt.Sprintf("instances_cache_%v.json", configName)
 	if cached, err := os.ReadFile(cacheFile); err == nil {
 		var instances []*Instance
 		if json.Unmarshal(cached, &instances) == nil {
@@ -36,16 +41,14 @@ func ListInstances() ([]*Instance, error) {
 		}
 	}
 
-	cmd := exec.Command("gcloud", "compute", "instances", "list", "--format=json")
+	cmd := exec.Command("gcloud", "compute", "instances", "list", "--format=json", "--configuration", configName)
 	output, err := cmd.Output()
 	if err != nil {
-		fmt.Println("Error fetching instances:", err)
 		return nil, err
 	}
 
 	var rawInstances []map[string]interface{}
 	if err = json.Unmarshal(output, &rawInstances); err != nil {
-		fmt.Println("Error parsing instance list:", err)
 		return nil, err
 	}
 
@@ -60,16 +63,15 @@ func ListInstances() ([]*Instance, error) {
 
 	cacheData, _ := json.Marshal(instances)
 	if err := os.WriteFile(cacheFile, cacheData, 0644); err != nil {
-		fmt.Println("Error writing cache file:", err)
 	}
 
 	return instances, nil
 }
 
-func (i Instance) SSH() error {
+func (i *Instance) SSH(configName string) error {
 	zone := strings.Split(i.Zone, "/")
 	zoneFlag := "--zone=" + zone[len(zone)-1]
-	cmd := exec.Command("gcloud", "compute", "ssh", fmt.Sprintf("%s@%s", "conductor", i.Name), zoneFlag)
+	cmd := exec.Command("gcloud", "compute", "ssh", "--configuration", configName, fmt.Sprintf("%s@%s", "conductor", i.Name), zoneFlag)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

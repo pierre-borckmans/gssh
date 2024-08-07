@@ -13,7 +13,12 @@ type Configuration struct {
 	Active  bool   `json:"is_active"`
 }
 
-func (c Configuration) Title() string { return c.Name }
+func (c Configuration) Title() string {
+	if c.Active {
+		return fmt.Sprintf("%v*", c.Name)
+	}
+	return c.Name
+}
 func (c Configuration) Description() string {
 	return fmt.Sprintf("Account: %s, Project: %s", c.Account, c.Project)
 }
@@ -47,4 +52,10 @@ func ListConfigurations() ([]*Configuration, error) {
 		return nil, err
 	}
 	return configurations, nil
+}
+
+func ActivateConfiguration(name string) error {
+	cmd := exec.Command("gcloud", "config", "configurations", "activate", name)
+	_, err := cmd.Output()
+	return err
 }

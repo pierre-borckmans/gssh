@@ -1,81 +1,124 @@
 package instances
 
 import (
+	"fmt"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	bl "github.com/winder/bubblelayout"
 	"gssh/gcloud"
+	"gssh/views"
 )
-
-var docStyle = lipgloss.NewStyle().Padding(2, 1)
 
 var _ tea.Model = &Model{}
 
-type ActivateMsg struct{}
-type DeactivateMsg struct{}
+type FocusMsg struct{}
+type BlurMsg struct{}
+type RefreshMsg struct {
+	ConfigName string
+}
 
-var Activate tea.Msg = ActivateMsg{}
-var Deactivate tea.Msg = DeactivateMsg{}
+type ErrMsg struct {
+	err error
+}
+type ResultMsg struct {
+	instances []*gcloud.Instance
+	items     []list.Item
+}
+type InstanceSelectedMsg struct {
+	Instance *gcloud.Instance
+}
 
 type Model struct {
+	focused bool
+	size    bl.Size
+	loading bool
+	error   error
+
+	configName       string
 	list             list.Model
-	error            error
 	instances        []*gcloud.Instance
 	selectedInstance *gcloud.Instance
-	active           bool
 }
 
 func InitialModel() *Model {
-	instances, err := gcloud.ListInstances()
-	if err != nil {
-		return &Model{
-			error: err,
-		}
-	}
-
-	items := make([]list.Item, 0)
-	for i, inst := range instances {
-		if inst.Status == gcloud.InstanceStatusRunning {
-			items = append(items, inst)
-		}
-		if i > 2 {
-			break
-		}
-	}
-
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.Title = "Select a GCP instance to SSH into:"
+	l := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
+	l.SetShowHelp(false)
+	l.SetShowStatusBar(false)
+	l.SetShowFilter(true)
+	l.Styles.Title = l.Styles.Title.Background(lipgloss.NoColor{}).Padding(0, 0)
+	l.FilterInput.Prompt = "🔍 "
 
 	return &Model{
-		list:      l,
-		instances: instances,
+		list:    l,
+		loading: true,
 	}
 }
 
+func RefreshInstances(configName string) tea.Msg {
+	instances, err := gcloud.ListInstances(configName)
+	if err != nil {
+		return ErrMsg{err}
+	}
+
+	items := make([]list.Item, 0)
+	for _, inst := range instances {
+		if inst.Status == gcloud.InstanceStatusRunning {
+			items = append(items, inst)
+		}
+	}
+	return ResultMsg{instances, items}
+}
+
 func (m *Model) Init() tea.Cmd {
-	return nil
+	return func() tea.Msg {
+		return RefreshInstances("railway-staging")
+	}
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case ActivateMsg:
-		m.active = true
+	case FocusMsg:
+		m.focused = true
 
-	case DeactivateMsg:
-		m.active = false
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
+	case BlurMsg:
+		m.focused = false
+
+	case RefreshMsg:
+		m.loading = true
+		m.configName = msg.ConfigName
+		return m, func() tea.Msg {
+			return RefreshInstances(msg.ConfigName)
 		}
+
+	case ErrMsg:
+		m.loading = false
+		m.error = msg.err
+
+	case ResultMsg:
+		m.instances = msg.instances
+		m.loading = false
+		m.error = nil
+		m.list.SetItems(msg.items)
+
+	case tea.KeyMsg:
 		if msg.String() == "enter" {
 			i, ok := m.list.SelectedItem().(*gcloud.Instance)
 			if ok {
 				m.selectedInstance = i
 			}
+
+			if m.list.FilterState() != list.Filtering {
+				return m, func() tea.Msg {
+					return InstanceSelectedMsg{m.selectedInstance}
+				}
+			}
 		}
-	case tea.WindowSizeMsg:
-		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v)
+
+	case bl.Size:
+		x, y := views.PanelStyle.GetFrameSize()
+		m.size = msg
+		m.list.SetSize(msg.Width-x-2, msg.Height-y-2)
 	}
 
 	var cmd tea.Cmd
@@ -84,17 +127,49 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
-	style := lipgloss.NewStyle().Padding(0, 2).Border(lipgloss.RoundedBorder())
+	style := views.PanelStyle.Width(m.size.Width - 2).Height(m.size.Height - 2)
 	selectedStyle := style.BorderForeground(lipgloss.Color("#5f5fd7"))
 
-	if m.active {
-		style = selectedStyle
-		m.list.Styles.Title = m.list.Styles.Title.Background(lipgloss.Color("62"))
-	} else {
-		m.list.Styles.Title = m.list.Styles.Title.Background(lipgloss.NoColor{})
+	configStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#ee6ff8"))
+
+	filterStr := ""
+	if m.list.FilterValue() != "" {
+		filterStr = lipgloss.NewStyle().
+			Background(lipgloss.Color("#baa000")).
+			Foreground(lipgloss.Color("#ffffff")).
+			Render(fmt.Sprintf(" 🔍 \"%v\" ", m.list.FilterValue()))
 	}
 
-	m.list.SetShowStatusBar(false)
-	m.list.SetShowHelp(false)
+	titleStyle := lipgloss.NewStyle()
+
+	if m.focused {
+		style = selectedStyle
+		titleStyle = titleStyle.Background(lipgloss.Color("62"))
+		configStyle = configStyle.Background(lipgloss.Color("62"))
+	} else {
+		titleStyle = titleStyle.Background(lipgloss.NoColor{})
+		configStyle = configStyle.Background(lipgloss.NoColor{})
+	}
+
+	m.list.Title = lipgloss.JoinHorizontal(0,
+		lipgloss.JoinHorizontal(0,
+			titleStyle.Foreground(lipgloss.Color("#ffffff")).Render(" Select a GCP instance in "),
+			configStyle.Render(fmt.Sprintf("[%v]", m.configName)),
+			titleStyle.Render(" "),
+		),
+		" ",
+		filterStr,
+	)
+
+	if m.error != nil {
+		return style.Align(lipgloss.Center, lipgloss.Center).Foreground(lipgloss.Color("202")).Render(
+			fmt.Sprintf("Error fetching instances for [%v]\n%v", m.configName, m.error.Error()),
+		)
+	}
+
+	if m.loading {
+		return style.Align(lipgloss.Center, lipgloss.Center).Render("Loading...")
+	}
+
 	return style.Render(m.list.View())
 }
