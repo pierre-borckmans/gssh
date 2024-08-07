@@ -15,8 +15,8 @@ import (
 type sessionState int
 
 const (
-	sessionStateInstances sessionState = iota
-	sessionStateConfigurations
+	sessionStateConfigurations sessionState = iota
+	sessionStateInstances
 	sessionStateHistory
 )
 
@@ -34,6 +34,8 @@ type model struct {
 	state          sessionState
 	configurations tea.Model
 	instances      tea.Model
+
+	exited bool
 
 	selectedConfiguration *gcloud.Configuration
 	selectedInstance      *gcloud.Instance
@@ -90,8 +92,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "escape", "ctrl+c":
+		case "esc", "ctrl+c":
+			m.exited = true
 			return m, tea.Quit
+
 		case "left", "shift+tab":
 			m.state = (m.state - 1 + 3) % 3
 			m.updateFocus()
@@ -111,6 +115,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_, cmd = m.instances.Update(msg)
 			case sessionStateConfigurations:
 				_, cmd = m.configurations.Update(msg)
+			case sessionStateHistory:
 			}
 		}
 
@@ -161,37 +166,43 @@ func (m model) View() string {
 }
 
 func main() {
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
-	r, err := p.Run()
-	if err != nil {
-		fmt.Println("Error running program:", err)
-		os.Exit(1)
-	}
-	if m, ok := r.(model); ok {
-		if m.selectedInstance != nil && m.selectedConfiguration != nil {
+	for {
+		p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+		r, err := p.Run()
+		if err != nil {
+			fmt.Println("Error running program:", err)
+			os.Exit(1)
+		}
+		if m, ok := r.(model); ok {
+			if m.exited {
+				fmt.Println("\n👋 See you soon!")
+				os.Exit(0)
+			}
 
-			fmt.Println()
-			fmt.Println(lipgloss.JoinHorizontal(
-				0,
-				lipgloss.NewStyle().Bold(true).Render("🚀 SSHing to instance "),
-				lipgloss.NewStyle().Foreground(lipgloss.Color("#7275ff")).Render(fmt.Sprintf("[%v]", m.selectedConfiguration.Name)),
-				lipgloss.NewStyle().Render(" -> "),
-				lipgloss.NewStyle().Foreground(lipgloss.Color("#ee6ff8")).Render(fmt.Sprintf("%v\n", m.selectedInstance.Name)),
-				" ...",
-			))
-			fmt.Println()
+			if m.selectedInstance != nil && m.selectedConfiguration != nil {
 
-			err = m.selectedInstance.SSH(m.selectedConfiguration.Name)
-			if err != nil {
+				fmt.Println()
 				fmt.Println(lipgloss.JoinHorizontal(
 					0,
-					lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff253b")).Render("Error SSHing to instance: "),
-					lipgloss.NewStyle().Foreground(lipgloss.Color("#ff666b")).Render(err.Error()),
+					lipgloss.NewStyle().Bold(true).Render("🚀 SSHing to instance "),
+					lipgloss.NewStyle().Foreground(lipgloss.Color("#7275ff")).Render(fmt.Sprintf("[%v]", m.selectedConfiguration.Name)),
+					lipgloss.NewStyle().Render(" -> "),
+					lipgloss.NewStyle().Foreground(lipgloss.Color("#ee6ff8")).Render(fmt.Sprintf("%v\n", m.selectedInstance.Name)),
+					" ...",
 				))
-				os.Exit(1)
+				fmt.Println()
+
+				err = m.selectedInstance.SSH(m.selectedConfiguration.Name)
+				if err != nil {
+					fmt.Println(lipgloss.JoinHorizontal(
+						0,
+						lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ff253b")).Render("Error SSHing to instance: "),
+						lipgloss.NewStyle().Foreground(lipgloss.Color("#ff666b")).Render(err.Error()),
+					))
+					os.Exit(1)
+				}
+				fmt.Println("\n🛬 SSH session closed.")
 			}
-			fmt.Println("\n🛬 SSH session closed.")
 		}
 	}
-	fmt.Println("\n👋 See you soon!")
 }
