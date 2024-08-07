@@ -48,6 +48,7 @@ func InitialModel() *Model {
 	l.SetShowFilter(true)
 	l.Styles.Title = l.Styles.Title.Background(lipgloss.NoColor{}).Padding(0, 0)
 	l.FilterInput.Prompt = "🔍 "
+	l.FilterInput.Placeholder = "Filter instances..."
 
 	return &Model{
 		list:    l,
@@ -102,7 +103,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetItems(msg.items)
 
 	case tea.KeyMsg:
-		if msg.String() == "enter" {
+		switch msg.String() {
+		case "enter":
 			i, ok := m.list.SelectedItem().(*gcloud.Instance)
 			if ok {
 				m.selectedInstance = i
@@ -112,6 +114,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, func() tea.Msg {
 					return InstanceSelectedMsg{m.selectedInstance}
 				}
+			}
+		case "esc":
+			if m.list.FilterState() != list.Filtering {
+				return m, nil
 			}
 		}
 

@@ -104,7 +104,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.focused = false
 
 	case tea.KeyMsg:
-		if msg.String() == "enter" {
+		switch msg.String() {
+		case "esc":
+			return m, nil
+		case "enter":
 			return m, func() tea.Msg {
 				if err := gcloud.ActivateConfiguration(m.list.SelectedItem().(*gcloud.Configuration).Name); err != nil {
 					return ErrMsg{err}
