@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/charmbracelet/bubbles/list"
+	"gssh/config"
 	"os"
 	"os/exec"
 	"path"
@@ -14,9 +15,9 @@ import (
 type InstanceStatus string
 
 var (
-	InstanceStatusRunning = InstanceStatus("RUNNING")
-	//InstanceStatusStopped  = InstanceStatus("STOPPED")
-	//InstanceStatusTerminal = InstanceStatus("TERMINATED")
+	InstanceStatusRunning  = InstanceStatus("RUNNING")
+	InstanceStatusStopped  = InstanceStatus("STOPPED")
+	InstanceStatusTerminal = InstanceStatus("TERMINATED")
 )
 
 type Instance struct {
@@ -42,7 +43,6 @@ func (i *Instance) FilterValue() string {
 var cacheDir string
 var historyFile string
 var history []*Connection
-var exclusionsFile string
 var exclusions []string
 
 func init() {
@@ -64,22 +64,8 @@ func init() {
 	bytes, err := os.ReadFile(historyFile)
 	_ = json.Unmarshal(bytes, &history)
 
-	// load or create the exclusions file
-	exclusionsFile = path.Join(cacheDir, "exclusions")
-	_, err = os.Stat(exclusionsFile)
-	if os.IsNotExist(err) {
-		f, _ := os.Create(exclusionsFile)
-		defer func() {
-			_ = f.Close()
-		}()
-		_, _ = f.WriteString("")
-	}
-	bytes, err = os.ReadFile(exclusionsFile)
-	if err == nil {
-		exclusions = strings.Split(string(bytes), "\n")
-	}
 	validExclusions := make([]string, 0)
-	for _, ex := range exclusions {
+	for _, ex := range config.Config.Instances.Exclusions {
 		if strings.Trim(ex, " ") != "" {
 			validExclusions = append(validExclusions, ex)
 		}
@@ -87,13 +73,20 @@ func init() {
 	exclusions = validExclusions
 }
 
-func ListInstances(configName string, clearCache bool) ([]*Instance, error) {
+func ListInstances(configName string, clearCache bool) ([]*Instance, *time.Time, error) {
 	var instances []*Instance
+	var lastUpdate = time.Now()
+	foundCache := false
 
 	cacheFile := path.Join(cacheDir, fmt.Sprintf("instances_cache_%v.json", configName))
 	if !clearCache {
 		if cached, err := os.ReadFile(cacheFile); err == nil {
 			_ = json.Unmarshal(cached, &instances)
+			foundCache = true
+			s, err := os.Stat(cacheFile)
+			if err == nil {
+				lastUpdate = s.ModTime()
+			}
 		}
 	} else {
 		_ = os.Remove(cacheFile)
@@ -103,12 +96,12 @@ func ListInstances(configName string, clearCache bool) ([]*Instance, error) {
 		cmd := exec.Command("gcloud", "compute", "instances", "list", "--format=json", "--configuration", configName)
 		output, err := cmd.Output()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		var rawInstances []map[string]interface{}
 		if err = json.Unmarshal(output, &rawInstances); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		instances = make([]*Instance, len(rawInstances))
@@ -136,17 +129,19 @@ func ListInstances(configName string, clearCache bool) ([]*Instance, error) {
 		filteredInstances = append(filteredInstances, inst)
 	}
 
-	cacheData, _ := json.Marshal(filteredInstances)
-	if err := os.WriteFile(cacheFile, cacheData, 0644); err != nil {
+	if !foundCache {
+		cacheData, _ := json.Marshal(filteredInstances)
+		if err := os.WriteFile(cacheFile, cacheData, 0644); err != nil {
+		}
 	}
 
-	return filteredInstances, nil
+	return filteredInstances, &lastUpdate, nil
 }
 
 func (i *Instance) SSH(configName string) error {
 	zone := strings.Split(i.Zone, "/")
 	zoneFlag := "--zone=" + zone[len(zone)-1]
-	cmd := exec.Command("gcloud", "compute", "ssh", "--configuration", configName, fmt.Sprintf("%s@%s", "conductor", i.Name), zoneFlag)
+	cmd := exec.Command("gcloud", "compute", "ssh", "--configuration", configName, fmt.Sprintf("%s@%s", config.Config.SSH.UserName, i.Name), zoneFlag)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

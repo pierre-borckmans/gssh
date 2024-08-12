@@ -5,6 +5,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	bl "github.com/winder/bubblelayout"
+	"gssh/config"
 	"gssh/gcloud"
 	"gssh/views"
 	"gssh/views/configurations"
@@ -198,6 +199,8 @@ func main() {
 					lipgloss.NewStyle().Foreground(lipgloss.Color("#7275ff")).Render(fmt.Sprintf("[%v]", m.selectedConfiguration.Name)),
 					lipgloss.NewStyle().Render(" -> "),
 					lipgloss.NewStyle().Foreground(lipgloss.Color("#ee6ff8")).Render(fmt.Sprintf("%v\n", m.selectedInstance.Name)),
+					lipgloss.NewStyle().Render(" as "),
+					lipgloss.NewStyle().Foreground(lipgloss.Color("#7275ff")).Render(config.Config.SSH.UserName),
 					" ...",
 				))
 				fmt.Println()

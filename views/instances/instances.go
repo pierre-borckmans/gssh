@@ -8,6 +8,7 @@ import (
 	bl "github.com/winder/bubblelayout"
 	"gssh/gcloud"
 	"gssh/views"
+	"time"
 )
 
 var _ tea.Model = &Model{}
@@ -25,6 +26,7 @@ type ErrMsg struct {
 type ResultMsg struct {
 	instances []*gcloud.Instance
 	items     []list.Item
+	timestamp time.Time
 }
 type InstanceSelectedMsg struct {
 	Instance *gcloud.Instance
@@ -39,6 +41,7 @@ type Model struct {
 	configName       string
 	list             list.Model
 	instances        []*gcloud.Instance
+	lastUpdate       time.Time
 	selectedInstance *gcloud.Instance
 }
 
@@ -58,7 +61,7 @@ func InitialModel() *Model {
 }
 
 func RefreshInstances(configName string, clearCache bool) tea.Msg {
-	instances, err := gcloud.ListInstances(configName, clearCache)
+	instances, lastUpdate, err := gcloud.ListInstances(configName, clearCache)
 	if err != nil {
 		return ErrMsg{err}
 	}
@@ -69,7 +72,7 @@ func RefreshInstances(configName string, clearCache bool) tea.Msg {
 			items = append(items, inst)
 		}
 	}
-	return ResultMsg{instances, items}
+	return ResultMsg{instances, items, *lastUpdate}
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -97,6 +100,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ResultMsg:
 		m.instances = msg.instances
+		m.lastUpdate = msg.timestamp
 		m.loading = false
 		m.error = nil
 		m.list.SetItems(msg.items)
@@ -173,8 +177,20 @@ func (m *Model) View() string {
 	}
 
 	if m.loading {
-		return style.Align(lipgloss.Center, lipgloss.Center).Render(fmt.Sprintf("Fetching instances for %s...", m.configName))
+		return style.Align(lipgloss.Center, lipgloss.Center).Render(fmt.Sprintf("Fetching instances for %s...", lipgloss.NewStyle().Foreground(lipgloss.Color("#7275ff")).Render(m.configName)))
 	}
 
-	return style.Render(m.list.View())
+	return style.Render(
+		lipgloss.JoinVertical(0,
+			m.list.View(),
+			"",
+			lipgloss.NewStyle().Width(m.size.Width-5).AlignHorizontal(lipgloss.Right).Foreground(lipgloss.Color("#aaaaaa")).
+				Render(
+					lipgloss.JoinHorizontal(0,
+						lipgloss.NewStyle().Foreground(lipgloss.Color("62")).Render("Last update: "),
+						lipgloss.NewStyle().Foreground(lipgloss.Color("#888888")).Render(m.lastUpdate.Format("02/01/2006 15:04:05")),
+					),
+				),
+		),
+	)
 }

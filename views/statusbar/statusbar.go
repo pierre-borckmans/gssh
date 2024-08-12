@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	bl "github.com/winder/bubblelayout"
 	"gssh/views"
+	"math"
 )
 
 var _ tea.Model = &Model{}
@@ -84,10 +85,14 @@ func (m *Model) View() string {
 		),
 	)
 
+	activeViewStr := "[" + activeView + "]"
+	truncate := int(math.Min(float64(len(activeViewStr)), math.Max(0, float64(m.size.Width-lipgloss.Width(shortcuts)-2))))
+	activeViewStr = activeViewStr[0:truncate]
+
 	return baseStyle.Width(m.size.Width).Padding(0, 1).Render(
 		lipgloss.JoinHorizontal(
 			0,
-			baseStyle.Width(m.size.Width-lipgloss.Width(shortcuts)).Padding(0, 1).Foreground(lipgloss.Color("4")).Render("["+activeView+"]"),
+			baseStyle.Width(m.size.Width-lipgloss.Width(shortcuts)).Padding(0, 1).Foreground(lipgloss.Color("4")).Render(activeViewStr),
 			shortcuts,
 		),
 	)
