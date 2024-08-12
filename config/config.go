@@ -22,23 +22,27 @@ type Configuration struct {
 
 var Config Configuration
 
-func init() {
-	Config = Configuration{}
-	userConfigDir, _ := os.UserHomeDir()
-	configFilepath := path.Join(userConfigDir, ".gssh", "config.toml")
-
-	if _, err := os.Stat(configFilepath); os.IsNotExist(err) {
-		f, _ := os.Create(configFilepath)
-		defer func() {
-			_ = f.Close()
-		}()
-		_, _ = f.WriteString(`
+var defaultConfigStr = `
 [ssh]
 user_name = "conductor"
 
 [instances]
-exclusions = ["gke-",""]
-`)
+exclusions = ["gke-"]
+`
+
+func init() {
+	Config = Configuration{}
+	userConfigDir, _ := os.UserHomeDir()
+	configDir := path.Join(userConfigDir, ".gssh")
+	configFilepath := path.Join(configDir, "config.toml")
+
+	if _, err := os.Stat(configFilepath); os.IsNotExist(err) {
+		err = os.MkdirAll(configDir, 0755)
+		f, _ := os.Create(configFilepath)
+		defer func() {
+			_ = f.Close()
+		}()
+		_, _ = f.WriteString(defaultConfigStr)
 	}
 
 	if _, err := toml.DecodeFile(configFilepath, &Config); err != nil {

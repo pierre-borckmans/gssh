@@ -65,12 +65,17 @@ func ListHistory() ([]*Connection, error) {
 }
 
 func AddConnection(configName string, i *gcloud.Instance) {
-	conn := &Connection{
-		ConfigName: configName,
-		Instance:   i,
-		Timestamp:  time.Now(),
+	var conn *Connection
+	if conn == nil {
+		conn = &Connection{
+			ConfigName: configName,
+			Instance:   i,
+			Timestamp:  time.Now(),
+		}
+		history = append(history, conn)
+	} else {
+		conn.Timestamp = time.Now()
 	}
-	history = append(history, conn)
 	bytes, err := json.Marshal(history)
 	if err == nil {
 		_ = os.WriteFile(historyFile, bytes, 0644)

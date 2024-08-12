@@ -36,10 +36,12 @@ type model struct {
 	history        tea.Model
 	statusBar      tea.Model
 
-	exited bool
+	filtering bool
+	exited    bool
 
-	selectedConfiguration *gcloud.Configuration
-	selectedInstance      *gcloud.Instance
+	selectedConfiguration     *gcloud.Configuration
+	selectedInstance          *gcloud.Instance
+	selectedHistoryConnection *history.Connection
 }
 
 func initialModel() model {
@@ -82,6 +84,23 @@ func (m model) updateFocus() {
 	m.statusBar.Update(statusbar.SetActivePanelMsg{ActivePanel: m.activePanel})
 }
 
+func (m model) speedDial(msg tea.Msg, index int) tea.Cmd {
+	if m.filtering {
+		switch m.activePanel {
+		case views.Instances:
+			_, cmd := m.instances.Update(msg)
+			return cmd
+		default:
+			return nil
+		}
+	}
+
+	m.activePanel = views.History
+	m.updateFocus()
+	_, speedDialCmd := m.history.Update(hist_view.SpeedDialMsg{ConnectionIndex: index})
+	return speedDialCmd
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -96,6 +115,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case instances.ErrMsg:
 		m.instances.Update(msg)
+
+	case instances.FilteringStateMsg:
+		m.filtering = msg.Filtering
 
 	case hist_view.ResultMsg:
 		m.history.Update(msg)
@@ -118,6 +140,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateFocus()
 
 		case "/":
+			m.filtering = true
 			m.activePanel = views.Instances
 			m.updateFocus()
 			m.instances.Update(msg)
@@ -132,6 +155,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			_, clearCmd := m.history.Update(hist_view.ClearMsg{})
 			cmds = append(cmds, clearCmd)
+
+		case "0":
+			cmds = append(cmds, m.speedDial(msg, 0))
+		case "1":
+			cmds = append(cmds, m.speedDial(msg, 1))
+		case "2":
+			cmds = append(cmds, m.speedDial(msg, 2))
+		case "3":
+			cmds = append(cmds, m.speedDial(msg, 3))
+		case "4":
+			cmds = append(cmds, m.speedDial(msg, 4))
+		case "5":
+			cmds = append(cmds, m.speedDial(msg, 5))
+		case "6":
+			cmds = append(cmds, m.speedDial(msg, 6))
+		case "7":
+			cmds = append(cmds, m.speedDial(msg, 7))
+		case "8":
+			cmds = append(cmds, m.speedDial(msg, 8))
+		case "9":
+			cmds = append(cmds, m.speedDial(msg, 9))
 
 		default:
 			switch m.activePanel {
@@ -164,6 +208,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case instances.InstanceSelectedMsg:
 		m.selectedInstance = msg.Instance
+		return m, tea.Quit
+
+	case hist_view.ConnectionSelectedMsg:
+		m.selectedHistoryConnection = msg.Connection
 		return m, tea.Quit
 
 	default:
@@ -211,22 +259,33 @@ func main() {
 				os.Exit(0)
 			}
 
+			var selectedInstance *gcloud.Instance
+			var selectedConfiguration string
 			if m.selectedInstance != nil && m.selectedConfiguration != nil {
+				selectedInstance = m.selectedInstance
+				selectedConfiguration = m.selectedConfiguration.Name
+			}
+			if m.selectedHistoryConnection != nil {
+				selectedInstance = m.selectedHistoryConnection.Instance
+				selectedConfiguration = m.selectedHistoryConnection.ConfigName
+			}
+
+			if selectedInstance != nil {
 				fmt.Println()
 				fmt.Println(lipgloss.JoinHorizontal(
 					0,
 					lipgloss.NewStyle().Bold(true).Render("🚀 SSHing to instance "),
-					lipgloss.NewStyle().Foreground(lipgloss.Color("#7275ff")).Render(fmt.Sprintf("[%v]", m.selectedConfiguration.Name)),
+					lipgloss.NewStyle().Foreground(lipgloss.Color("#7275ff")).Render(fmt.Sprintf("[%v]", selectedConfiguration)),
 					lipgloss.NewStyle().Render(" -> "),
-					lipgloss.NewStyle().Foreground(lipgloss.Color("#ee6ff8")).Render(fmt.Sprintf("%v\n", m.selectedInstance.Name)),
+					lipgloss.NewStyle().Foreground(lipgloss.Color("#ee6ff8")).Render(fmt.Sprintf("%v\n", selectedInstance.Name)),
 					lipgloss.NewStyle().Render(" as "),
 					lipgloss.NewStyle().Foreground(lipgloss.Color("#7275ff")).Render(config.Config.SSH.UserName),
 					" ...",
 				))
 				fmt.Println()
 
-				history.AddConnection(m.selectedConfiguration.Name, m.selectedInstance)
-				err = m.selectedInstance.SSH(m.selectedConfiguration.Name)
+				history.AddConnection(selectedConfiguration, selectedInstance)
+				err = selectedInstance.SSH(selectedConfiguration)
 				if err != nil {
 					fmt.Println(lipgloss.JoinHorizontal(
 						0,

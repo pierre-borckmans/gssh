@@ -5,9 +5,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	bl "github.com/winder/bubblelayout"
-	"gssh/gcloud"
 	"gssh/history"
 	"gssh/views"
+	"time"
 )
 
 var _ tea.Model = &Model{}
@@ -22,15 +22,20 @@ type ResultMsg struct {
 	items   []list.Item
 }
 type ClearMsg struct{}
+type ConnectionSelectedMsg struct {
+	Connection *history.Connection
+}
+type SpeedDialMsg struct {
+	ConnectionIndex int
+}
 
 type Model struct {
 	focused bool
 	size    bl.Size
 	error   error
 
-	list             list.Model
-	connections      []*history.Connection
-	selectedInstance *gcloud.Instance
+	list        list.Model
+	connections []*history.Connection
 }
 
 func RefreshHistory() tea.Msg {
@@ -83,6 +88,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, func() tea.Msg {
 			history.ClearHistory()
 			return RefreshHistory()
+		}
+
+	case SpeedDialMsg:
+		m.list.Select(msg.ConnectionIndex)
+		c, ok := m.list.SelectedItem().(*history.Connection)
+		if !ok {
+			return m, nil
+		}
+		return m, func() tea.Msg {
+			time.Sleep(time.Millisecond * 500)
+			return ConnectionSelectedMsg{c}
+		}
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter":
+			c, ok := m.list.SelectedItem().(*history.Connection)
+			if !ok {
+				return m, nil
+			}
+
+			return m, func() tea.Msg {
+				return ConnectionSelectedMsg{c}
+			}
 		}
 
 	case bl.Size:

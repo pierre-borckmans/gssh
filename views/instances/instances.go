@@ -19,6 +19,9 @@ type RefreshMsg struct {
 	ConfigName string
 	ClearCache bool
 }
+type FilteringStateMsg struct {
+	Filtering bool
+}
 
 type ErrMsg struct {
 	err error
@@ -80,6 +83,7 @@ func (m *Model) Init() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case FocusMsg:
 		m.focused = true
@@ -122,6 +126,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.list.FilterState() != list.Filtering {
 				return m, nil
 			}
+			cmds = append(cmds, func() tea.Msg {
+				return FilteringStateMsg{Filtering: false}
+			})
 		}
 
 	case bl.Size:
@@ -132,7 +139,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
-	return m, cmd
+	cmds = append(cmds, cmd)
+	return m, tea.Batch(cmds...)
 }
 
 func (m *Model) View() string {
