@@ -87,12 +87,16 @@ func init() {
 	exclusions = validExclusions
 }
 
-func ListInstances(configName string) ([]*Instance, error) {
+func ListInstances(configName string, clearCache bool) ([]*Instance, error) {
 	var instances []*Instance
 
 	cacheFile := path.Join(cacheDir, fmt.Sprintf("instances_cache_%v.json", configName))
-	if cached, err := os.ReadFile(cacheFile); err == nil {
-		_ = json.Unmarshal(cached, &instances)
+	if !clearCache {
+		if cached, err := os.ReadFile(cacheFile); err == nil {
+			_ = json.Unmarshal(cached, &instances)
+		}
+	} else {
+		_ = os.Remove(cacheFile)
 	}
 
 	if instances == nil || len(instances) == 0 {

@@ -16,6 +16,7 @@ type FocusMsg struct{}
 type BlurMsg struct{}
 type RefreshMsg struct {
 	ConfigName string
+	ClearCache bool
 }
 
 type ErrMsg struct {
@@ -56,8 +57,8 @@ func InitialModel() *Model {
 	}
 }
 
-func RefreshInstances(configName string) tea.Msg {
-	instances, err := gcloud.ListInstances(configName)
+func RefreshInstances(configName string, clearCache bool) tea.Msg {
+	instances, err := gcloud.ListInstances(configName, clearCache)
 	if err != nil {
 		return ErrMsg{err}
 	}
@@ -72,9 +73,7 @@ func RefreshInstances(configName string) tea.Msg {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return func() tea.Msg {
-		return RefreshInstances("railway-staging")
-	}
+	return nil
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -89,7 +88,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = true
 		m.configName = msg.ConfigName
 		return m, func() tea.Msg {
-			return RefreshInstances(msg.ConfigName)
+			return RefreshInstances(msg.ConfigName, msg.ClearCache)
 		}
 
 	case ErrMsg:
@@ -174,7 +173,7 @@ func (m *Model) View() string {
 	}
 
 	if m.loading {
-		return style.Align(lipgloss.Center, lipgloss.Center).Render("Loading...")
+		return style.Align(lipgloss.Center, lipgloss.Center).Render(fmt.Sprintf("Fetching instances for %s...", m.configName))
 	}
 
 	return style.Render(m.list.View())

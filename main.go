@@ -9,15 +9,8 @@ import (
 	"gssh/views"
 	"gssh/views/configurations"
 	"gssh/views/instances"
+	"gssh/views/statusbar"
 	"os"
-)
-
-type sessionState int
-
-const (
-	sessionStateConfigurations sessionState = iota
-	sessionStateInstances
-	sessionStateHistory
 )
 
 var _ tea.Model = model{}
@@ -33,9 +26,11 @@ type model struct {
 	historySize           bl.Size
 	statusSize            bl.Size
 
-	state          sessionState
+	activePanel views.ActivePanel
+
 	configurations tea.Model
 	instances      tea.Model
+	statusBar      tea.Model
 
 	exited bool
 
@@ -55,9 +50,10 @@ func initialModel() model {
 		instancesPanelId:      instancesPanelId,
 		historyPanelId:        historyPanelId,
 		statusPanelId:         statusPanelId,
-		state:                 sessionStateConfigurations,
+		activePanel:           views.Configurations,
 		configurations:        configurations.InitialModel(),
 		instances:             instances.InitialModel(),
+		statusBar:             statusbar.InitialModel(),
 	}
 }
 
@@ -69,14 +65,14 @@ func (m model) updateFocus() {
 	m.instances.Update(instances.BlurMsg{})
 	m.configurations.Update(configurations.BlurMsg{})
 
-	switch m.state {
-	case sessionStateConfigurations:
+	switch m.activePanel {
+	case views.Configurations:
 		m.configurations.Update(configurations.FocusMsg{})
-	case sessionStateInstances:
+	case views.Instances:
 		m.instances.Update(instances.FocusMsg{})
-	case sessionStateHistory:
+	case views.History:
 	}
-
+	m.statusBar.Update(statusbar.SetActivePanelMsg{ActivePanel: m.activePanel})
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -101,25 +97,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "left", "shift+tab":
-			m.state = (m.state - 1 + 3) % 3
+			m.activePanel = (m.activePanel - 1 + 3) % 3
 			m.updateFocus()
 
 		case "right", "tab":
-			m.state = (m.state + 1) % 3
+			m.activePanel = (m.activePanel + 1) % 3
 			m.updateFocus()
 
 		case "/":
-			m.state = sessionStateInstances
+			m.activePanel = views.Instances
 			m.updateFocus()
 			m.instances.Update(msg)
 
+		case "r":
+			_, refreshCmd := m.instances.Update(instances.RefreshMsg{
+				ConfigName: m.selectedConfiguration.Name,
+				ClearCache: true,
+			})
+			cmds = append(cmds, refreshCmd)
+
 		default:
-			switch m.state {
-			case sessionStateInstances:
+			switch m.activePanel {
+			case views.Instances:
 				_, cmd = m.instances.Update(msg)
-			case sessionStateConfigurations:
+			case views.Configurations:
 				_, cmd = m.configurations.Update(msg)
-			case sessionStateHistory:
+			case views.History:
 			}
 		}
 
@@ -135,6 +138,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusSize, _ = msg.Size(m.statusPanelId)
 		m.configurations.Update(m.configSize)
 		m.instances.Update(m.instSize)
+		m.statusBar.Update(m.statusSize)
 
 	case configurations.ConfigurationSelectedMsg:
 		m.selectedConfiguration = msg.Configuration
@@ -144,10 +148,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	default:
-		switch m.state {
-		case sessionStateInstances:
+		switch m.activePanel {
+		case views.Instances:
 			_, cmd = m.instances.Update(msg)
-		case sessionStateConfigurations:
+		case views.Configurations:
 			_, cmd = m.configurations.Update(msg)
 		}
 	}
@@ -168,7 +172,7 @@ func (m model) View() string {
 		views.BoxStyle(
 			m.historySize, false).Render("History"),
 		views.BoxStyle(
-			m.statusSize, false).Padding(0, 1).Background(lipgloss.Color("62")).Align(lipgloss.Right, lipgloss.Center).Render("Status"),
+			m.statusSize, false).Render(m.statusBar.View()),
 	)
 }
 
@@ -187,7 +191,6 @@ func main() {
 			}
 
 			if m.selectedInstance != nil && m.selectedConfiguration != nil {
-
 				fmt.Println()
 				fmt.Println(lipgloss.JoinHorizontal(
 					0,

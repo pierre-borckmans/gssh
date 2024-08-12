@@ -5,6 +5,14 @@ import (
 	bl "github.com/winder/bubblelayout"
 )
 
+type ActivePanel int
+
+const (
+	Configurations ActivePanel = iota
+	Instances
+	History
+)
+
 var PanelStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(1)
 
 func BoxStyle(size bl.Size, border bool) lipgloss.Style {
