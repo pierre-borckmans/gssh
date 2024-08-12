@@ -7,8 +7,10 @@ import (
 	bl "github.com/winder/bubblelayout"
 	"gssh/config"
 	"gssh/gcloud"
+	"gssh/history"
 	"gssh/views"
 	"gssh/views/configurations"
+	hist_view "gssh/views/history"
 	"gssh/views/instances"
 	"gssh/views/statusbar"
 	"os"
@@ -31,6 +33,7 @@ type model struct {
 
 	configurations tea.Model
 	instances      tea.Model
+	history        tea.Model
 	statusBar      tea.Model
 
 	exited bool
@@ -54,17 +57,19 @@ func initialModel() model {
 		activePanel:           views.Configurations,
 		configurations:        configurations.InitialModel(),
 		instances:             instances.InitialModel(),
+		history:               hist_view.InitialModel(),
 		statusBar:             statusbar.InitialModel(),
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.configurations.Init(), m.instances.Init())
+	return tea.Batch(m.configurations.Init(), m.instances.Init(), m.history.Init())
 }
 
 func (m model) updateFocus() {
 	m.instances.Update(instances.BlurMsg{})
 	m.configurations.Update(configurations.BlurMsg{})
+	m.history.Update(hist_view.BlurMsg{})
 
 	switch m.activePanel {
 	case views.Configurations:
@@ -72,6 +77,7 @@ func (m model) updateFocus() {
 	case views.Instances:
 		m.instances.Update(instances.FocusMsg{})
 	case views.History:
+		m.history.Update(hist_view.FocusMsg{})
 	}
 	m.statusBar.Update(statusbar.SetActivePanelMsg{ActivePanel: m.activePanel})
 }
@@ -90,6 +96,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case instances.ErrMsg:
 		m.instances.Update(msg)
+
+	case hist_view.ResultMsg:
+		m.history.Update(msg)
+
+	case hist_view.ErrMsg:
+		m.history.Update(msg)
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -117,6 +129,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 			cmds = append(cmds, refreshCmd)
 
+		case "c":
+			_, clearCmd := m.history.Update(hist_view.ClearMsg{})
+			cmds = append(cmds, clearCmd)
+
 		default:
 			switch m.activePanel {
 			case views.Instances:
@@ -124,6 +140,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case views.Configurations:
 				_, cmd = m.configurations.Update(msg)
 			case views.History:
+				_, cmd = m.history.Update(msg)
 			}
 		}
 
@@ -139,6 +156,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusSize, _ = msg.Size(m.statusPanelId)
 		m.configurations.Update(m.configSize)
 		m.instances.Update(m.instSize)
+		m.history.Update(m.historySize)
 		m.statusBar.Update(m.statusSize)
 
 	case configurations.ConfigurationSelectedMsg:
@@ -154,6 +172,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_, cmd = m.instances.Update(msg)
 		case views.Configurations:
 			_, cmd = m.configurations.Update(msg)
+		case views.History:
+			_, cmd = m.history.Update(msg)
 		}
 	}
 
@@ -171,7 +191,7 @@ func (m model) View() string {
 				m.instSize, false).Render(m.instances.View()),
 		),
 		views.BoxStyle(
-			m.historySize, false).Render("History"),
+			m.historySize, false).Render(m.history.View()),
 		views.BoxStyle(
 			m.statusSize, false).Render(m.statusBar.View()),
 	)
@@ -205,6 +225,7 @@ func main() {
 				))
 				fmt.Println()
 
+				history.AddConnection(m.selectedConfiguration.Name, m.selectedInstance)
 				err = m.selectedInstance.SSH(m.selectedConfiguration.Name)
 				if err != nil {
 					fmt.Println(lipgloss.JoinHorizontal(

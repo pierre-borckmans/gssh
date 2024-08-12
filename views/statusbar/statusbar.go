@@ -81,6 +81,7 @@ func (m *Model) View() string {
 			shortcut("↵", enter),
 			shortcut("R", "Reload instances"),
 			shortcut("C", "Clear history"),
+			shortcut("0-9", "Speed dial history"),
 			shortcut("Q", "Quit"),
 		),
 	)

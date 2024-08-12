@@ -26,12 +26,6 @@ type Instance struct {
 	Status InstanceStatus
 }
 
-type Connection struct {
-	ConfigName string
-	Instance   *Instance
-	Timestamp  time.Time
-}
-
 var _ list.Item = &Instance{}
 
 func (i *Instance) Title() string       { return i.Name }
@@ -41,28 +35,12 @@ func (i *Instance) FilterValue() string {
 }
 
 var cacheDir string
-var historyFile string
-var history []*Connection
 var exclusions []string
 
 func init() {
 	userConfigDir, _ := os.UserHomeDir()
 	cacheDir = path.Join(userConfigDir, ".gssh")
 	_ = os.MkdirAll(cacheDir, 0755)
-
-	// load or create the history file
-	historyFile = path.Join(cacheDir, "history.json")
-	_, err := os.Stat(historyFile)
-	if os.IsNotExist(err) {
-		f, _ := os.Create(historyFile)
-		defer func() {
-			_ = f.Close()
-		}()
-		_, _ = f.WriteString("[]")
-	}
-	history = make([]*Connection, 0)
-	bytes, err := os.ReadFile(historyFile)
-	_ = json.Unmarshal(bytes, &history)
 
 	validExclusions := make([]string, 0)
 	for _, ex := range config.Config.Instances.Exclusions {
@@ -145,18 +123,6 @@ func (i *Instance) SSH(configName string) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
-	// add the connection to the history
-	conn := &Connection{
-		ConfigName: configName,
-		Instance:   i,
-		Timestamp:  time.Now(),
-	}
-	history = append(history, conn)
-	bytes, err := json.Marshal(history)
-	if err == nil {
-		_ = os.WriteFile(historyFile, bytes, 0644)
-	}
 
 	if err := cmd.Run(); err != nil {
 		return err
