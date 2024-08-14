@@ -6,6 +6,7 @@ import (
 	"gssh/gcloud"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 )
@@ -58,6 +59,9 @@ func ListHistory() ([]*Connection, error) {
 	var history []*Connection
 	bytes, err := os.ReadFile(historyFile)
 	_ = json.Unmarshal(bytes, &history)
+	sort.Slice(history, func(i, j int) bool {
+		return history[i].Timestamp.After(history[j].Timestamp)
+	})
 	for i, conn := range history {
 		conn.Index = i
 	}
