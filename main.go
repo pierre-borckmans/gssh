@@ -126,6 +126,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.history.Update(msg)
 
 	case tea.KeyMsg:
+		if m.filtering {
+			switch m.activePanel {
+			case views.Instances:
+				_, cmd = m.instances.Update(msg)
+				return m, cmd
+			}
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			m.exited = true
