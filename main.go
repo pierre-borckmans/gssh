@@ -14,9 +14,10 @@ import (
 	"gssh/views/instances"
 	"gssh/views/statusbar"
 	"os"
+	"time"
 )
 
-var _ tea.Model = model{}
+var _ tea.Model = &model{}
 
 type model struct {
 	layout                bl.BubbleLayout
@@ -44,13 +45,13 @@ type model struct {
 	selectedHistoryConnection *history.Connection
 }
 
-func initialModel() model {
+func initialModel() *model {
 	layout := bl.New()
 	configurationsPanelId := layout.Add("")
 	instancesPanelId := layout.Add("wrap")
 	historyPanelId := layout.Add("spanw 2 wrap")
 	statusPanelId := layout.Add("dock south 1!")
-	return model{
+	m := &model{
 		layout:                layout,
 		configurationsPanelId: configurationsPanelId,
 		instancesPanelId:      instancesPanelId,
@@ -62,13 +63,27 @@ func initialModel() model {
 		history:               hist_view.InitialModel(),
 		statusBar:             statusbar.InitialModel(),
 	}
+	return m
 }
 
-func (m model) Init() tea.Cmd {
-	return tea.Batch(m.configurations.Init(), m.instances.Init(), m.history.Init())
+type pollTickMsg struct{}
+
+func (m *model) pollTick() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return pollTickMsg{}
+	})
 }
 
-func (m model) updateFocus() {
+func (m *model) Init() tea.Cmd {
+	return tea.Batch(
+		m.configurations.Init(),
+		m.instances.Init(),
+		m.history.Init(),
+		m.pollTick(),
+	)
+}
+
+func (m *model) updateFocus() {
 	m.instances.Update(instances.BlurMsg{})
 	m.configurations.Update(configurations.BlurMsg{})
 	m.history.Update(hist_view.BlurMsg{})
@@ -84,7 +99,7 @@ func (m model) updateFocus() {
 	m.statusBar.Update(statusbar.SetActivePanelMsg{ActivePanel: m.activePanel})
 }
 
-func (m model) speedDial(msg tea.Msg, index int) tea.Cmd {
+func (m *model) speedDial(msg tea.Msg, index int) tea.Cmd {
 	if m.filtering {
 		switch m.activePanel {
 		case views.Instances:
@@ -101,11 +116,23 @@ func (m model) speedDial(msg tea.Msg, index int) tea.Cmd {
 	return speedDialCmd
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case pollTickMsg:
+		if !m.filtering {
+			_, refreshInstancesCmd := m.instances.Update(instances.RefreshMsg{
+				ConfigName: m.selectedConfiguration.Name,
+				ClearCache: false,
+			})
+			_, refreshHistoryCmd := m.history.Update(hist_view.RefreshMsg{})
+			cmds = append(cmds, refreshInstancesCmd)
+			cmds = append(cmds, refreshHistoryCmd)
+			cmds = append(cmds, m.pollTick())
+		}
+
 	case instances.RefreshMsg:
 		_, refreshCmd := m.instances.Update(msg)
 		cmds = append(cmds, refreshCmd)
@@ -237,7 +264,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
+func (m *model) View() string {
 	return lipgloss.JoinVertical(
 		0, lipgloss.JoinHorizontal(
 			0,
@@ -255,13 +282,13 @@ func (m model) View() string {
 
 func main() {
 	for {
-		p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+		p := tea.NewProgram(initialModel(), tea.WithAltScreen(), tea.WithMouseCellMotion())
 		r, err := p.Run()
 		if err != nil {
 			fmt.Println("Error running program:", err)
 			os.Exit(1)
 		}
-		if m, ok := r.(model); ok {
+		if m, ok := r.(*model); ok {
 			if m.exited {
 				fmt.Println("\n👋 See you soon!")
 				os.Exit(0)

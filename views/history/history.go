@@ -17,6 +17,7 @@ type BlurMsg struct{}
 type ErrMsg struct {
 	err error
 }
+type RefreshMsg struct{}
 type ResultMsg struct {
 	history []*history.Connection
 	items   []list.Item
@@ -63,6 +64,10 @@ func InitialModel() *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
+	go func() {
+		m.Update(RefreshHistory())
+		time.Sleep(time.Millisecond * 500)
+	}()
 	return func() tea.Msg {
 		return RefreshHistory()
 	}
@@ -118,6 +123,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		x, y := views.PanelStyle.GetFrameSize()
 		m.size = msg
 		m.list.SetSize(msg.Width-x-2, msg.Height-y-2)
+
+	case RefreshMsg:
+		return m, func() tea.Msg {
+			return RefreshHistory()
+		}
 	}
 
 	var cmd tea.Cmd

@@ -92,7 +92,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.focused = false
 
 	case RefreshMsg:
-		m.loading = true
+		m.loading = msg.ClearCache
 		m.configName = msg.ConfigName
 		return m, func() tea.Msg {
 			return RefreshInstances(msg.ConfigName, msg.ClearCache)
